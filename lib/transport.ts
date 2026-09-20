@@ -35,7 +35,11 @@ async function connect(){
   const config=await (await fetch(import.meta.env.BASE_URL+'config.json',{cache:'no-store'})).json();
   if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(config.appsScriptUrl??''))throw new Error('尚未連接 Google 試算表，請先完成網站設定。');
   return new Promise<{target:Window;origin:string}>((resolve,reject)=>{
-   const nonce=crypto.randomUUID();let connectedSource:MessageEventSource|null=null;const frame=document.createElement('iframe');frame.hidden=true;frame.title='Google 試算表連線';
+   const nonce=crypto.randomUUID();let connectedSource:MessageEventSource|null=null;const frame=document.createElement('iframe');
+   // Some browsers suspend scripts inside display:none third-party frames. Keep the
+   // Apps Script bridge mounted off-screen so it can post its ready message.
+   frame.title='Google 試算表連線';frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
+   Object.assign(frame.style,{position:'fixed',left:'-10px',top:'-10px',width:'1px',height:'1px',opacity:'0',border:'0',pointerEvents:'none'});
    const timeout=setTimeout(()=>{window.removeEventListener('message',receive);frame.remove();reject(new Error('Google 試算表連線逾時，請確認部署權限與網路。'));},30000);
    function receive(e:MessageEvent){
     if(e.data?.channel!==nonce||!/^https:\/\/[a-z0-9-]+\.script\.googleusercontent\.com$/.test(e.origin)||!e.source)return;
