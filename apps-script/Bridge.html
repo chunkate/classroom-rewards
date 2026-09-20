@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="UTF-8"></head><body><script>
+const channel=<?!= JSON.stringify(channel) ?>;
+const allowedOrigin=<?!= JSON.stringify(allowedOrigin) ?>;
+window.addEventListener('message',function(event){
+ if(event.source!==window.top||event.origin!==allowedOrigin||event.data?.type!=='classroom-request')return;
+ const id=event.data.id;
+ if(typeof id!=='string'||id.length>80)return;
+ const send=reply=>window.top.postMessage({type:'classroom-response',channel,id,reply},allowedOrigin);
+ google.script.run.withSuccessHandler(send).withFailureHandler(()=>send({status:503,body:{error:'Google 試算表暫時無法使用，請重試原操作。'}})).classroomRpc(event.data.payload);
+});
+window.top.postMessage({type:'classroom-ready',channel},allowedOrigin);
+</script></body></html>

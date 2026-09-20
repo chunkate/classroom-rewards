@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env*
+.clasp.json
+*備份*
+*完整紀錄*.json
+*登入資訊*
+private/
