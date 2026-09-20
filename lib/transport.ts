@@ -37,16 +37,13 @@ async function getEndpoint(){
  return endpoint;
 }
 async function rpc(payload:Record<string,unknown>):Promise<Reply>{
- const url=await getEndpoint(),id=crypto.randomUUID(),channel=crypto.randomUUID();
+ const url=await getEndpoint(),callback=`__classroom_${crypto.randomUUID().replaceAll('-','')}`;
  return new Promise((resolve,reject)=>{
-  const frame=document.createElement('iframe'),form=document.createElement('form');frame.name=`classroom-${id}`;frame.title='Google 試算表連線';frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
-  Object.assign(frame.style,{position:'fixed',left:'0',top:'0',width:'320px',height:'240px',opacity:'0.01',clipPath:'inset(100%)',border:'0',pointerEvents:'none'});
-  const finish=()=>{clearTimeout(timer);window.removeEventListener('message',receive);frame.remove();};
+  const script=document.createElement('script'),scope=window as unknown as Record<string,unknown>;
+  const finish=()=>{clearTimeout(timer);script.remove();delete scope[callback];};
   const timer=setTimeout(()=>{finish();reject(new Error('連線逾時，請按重試確認原操作。'));},45000);
-  function receive(e:MessageEvent){if(e.data?.type!=='classroom-response'||e.data.channel!==channel||e.data.id!==id||!/^https:\/\/[a-z0-9-]+\.script\.googleusercontent\.com$/.test(e.origin))return;finish();resolve(e.data.reply);}
-  window.addEventListener('message',receive);form.method='POST';form.action=url;form.target=frame.name;
-  for(const [name,value] of Object.entries({channel,id,payload:JSON.stringify({...payload,token:session})})){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);}
-  document.body.append(frame,form);form.submit();form.remove();
+  scope[callback]=(reply:Reply)=>{finish();resolve(reply);};script.onerror=()=>{finish();reject(new Error('Google 試算表連線失敗，請確認網路後重試。'));};
+  script.src=`${url}?callback=${callback}&payload=${encodeURIComponent(JSON.stringify({...payload,token:session}))}`;document.head.appendChild(script);
  });
 }
 async function verifier(password:string,salt:string){const input=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations:100000},input,256));}

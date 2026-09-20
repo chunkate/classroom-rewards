@@ -9,6 +9,13 @@ function book_(){return SpreadsheetApp.openById(props_().getProperty('SPREADSHEE
 function session_(token){if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))return false;return CacheService.getScriptCache().get('session:'+hash_(token))===hash_(props_().getProperty('PASSWORD_VERIFIER')||'');}
 function login_(){const token=random_();CacheService.getScriptCache().put('session:'+hash_(token),hash_(props_().getProperty('PASSWORD_VERIFIER')),21600);return reply_(200,{authenticated:true,token});}
 function doGet(e){
+ const callback=e?.parameter?.callback||'';
+ if(callback){
+  if(!/^__classroom_[a-f0-9]{32}$/.test(callback))return ContentService.createTextOutput('/* invalid callback */').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  let reply;try{reply=classroomRpc(JSON.parse(e?.parameter?.payload||'{}'));}catch(error){reply=reply_(503,{error:'Google 試算表暫時無法使用，請重試原操作。'});}
+  const data=JSON.stringify(reply).replace(/</g,'\\u003c');
+  return ContentService.createTextOutput(callback+'('+data+');').setMimeType(ContentService.MimeType.JAVASCRIPT);
+ }
  const origin=props_().getProperty('GITHUB_ORIGIN');const channel=e?.parameter?.channel||'';
  if(!/^https:\/\/[a-zA-Z0-9-]+\.github\.io$/.test(origin||'')||!/^[a-f0-9-]{36}$/.test(channel))return HtmlService.createHtmlOutput('班級獎勵簿：請由已設定的 GitHub 網址開啟。');
  const t=HtmlService.createTemplateFromFile('Bridge');t.channel=channel;t.allowedOrigin=origin;
