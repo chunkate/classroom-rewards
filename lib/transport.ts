@@ -42,6 +42,7 @@ async function connect(){
    Object.assign(frame.style,{position:'fixed',left:'0',top:'0',width:'320px',height:'240px',opacity:'0.01',clipPath:'inset(100%)',border:'0',pointerEvents:'none'});
    const timeout=setTimeout(()=>{window.removeEventListener('message',receive);frame.remove();reject(new Error('Google 試算表連線逾時，請確認部署權限與網路。'));},30000);
    function receive(e:MessageEvent){
+    console.info('classroom-bridge-message',e.origin,e.data?.type,e.data?.channel===nonce);
     if(e.data?.channel!==nonce||!/^https:\/\/[a-z0-9-]+\.script\.googleusercontent\.com$/.test(e.origin)||!e.source)return;
     if(connectedSource&&e.source!==connectedSource)return;
     if(e.data.type==='classroom-ready'){connectedSource=e.source;clearTimeout(timeout);resolve({target:e.source as Window,origin:e.origin});}
