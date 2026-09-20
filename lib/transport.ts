@@ -1,9 +1,7 @@
 import {applyCommand,type State,type Command} from './rewards';
 
 type Reply={status:number;body:Record<string,unknown>};
-type Pending={resolve:(r:Reply)=>void;reject:(e:Error)=>void;timer:ReturnType<typeof setTimeout>};
-let bridge:Promise<{target:Window;origin:string}>|undefined;
-const requests=new Map<string,Pending>();
+let endpoint:Promise<string>|undefined;
 let session=sessionStorage.getItem('classroom-session')??'';
 const visualPreview=import.meta.env.DEV&&new URLSearchParams(location.search).has('preview');
 const previewDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -30,37 +28,26 @@ function previewReply(path:string,options:RequestInit){
 }
 function keepSession(value:string){session=value;if(value)sessionStorage.setItem('classroom-session',value);else sessionStorage.removeItem('classroom-session');}
 const hex=(bytes:ArrayBuffer)=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
-async function connect(){
- if(!bridge)bridge=(async()=>{
+async function getEndpoint(){
+ if(!endpoint)endpoint=(async()=>{
   const config=await (await fetch(import.meta.env.BASE_URL+'config.json',{cache:'no-store'})).json();
   if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(config.appsScriptUrl??''))throw new Error('尚未連接 Google 試算表，請先完成網站設定。');
-  return new Promise<{target:Window;origin:string}>((resolve,reject)=>{
-   const nonce=crypto.randomUUID();let connectedSource:MessageEventSource|null=null;const frame=document.createElement('iframe');
-   // Some browsers suspend scripts inside display:none third-party frames. Keep the
-   // Apps Script bridge mounted off-screen so it can post its ready message.
-   frame.title='Google 試算表連線';frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
-   const authorizationView=new URLSearchParams(location.search).has('authorize');
-   Object.assign(frame.style,authorizationView
-    ?{position:'fixed',left:'0',top:'0',width:'100vw',height:'100vh',zIndex:'9999',background:'white',border:'0'}
-    :{position:'fixed',left:'0',top:'0',width:'320px',height:'240px',opacity:'0.01',clipPath:'inset(100%)',border:'0',pointerEvents:'none'});
-   const timeout=setTimeout(()=>{window.removeEventListener('message',receive);frame.remove();reject(new Error('Google 試算表連線逾時，請確認部署權限與網路。'));},30000);
-   function receive(e:MessageEvent){
-    console.info('classroom-bridge-message',e.origin,e.data?.type,e.data?.channel===nonce);
-    if(e.data?.channel!==nonce||!/^https:\/\/[a-z0-9-]+\.script\.googleusercontent\.com$/.test(e.origin)||!e.source)return;
-    if(connectedSource&&e.source!==connectedSource)return;
-    if(e.data.type==='classroom-ready'){connectedSource=e.source;clearTimeout(timeout);resolve({target:e.source as Window,origin:e.origin});}
-    if(e.data.type==='classroom-response'){
-     const request=requests.get(e.data.id);if(!request)return;requests.delete(e.data.id);clearTimeout(request.timer);request.resolve(e.data.reply);
-    }
-   }
-   window.addEventListener('message',receive);frame.src=`${config.appsScriptUrl}?channel=${encodeURIComponent(nonce)}`;document.body.appendChild(frame);
-  });
- })().catch(e=>{bridge=undefined;throw e;});
- return bridge;
+  return config.appsScriptUrl as string;
+ })().catch(e=>{endpoint=undefined;throw e;});
+ return endpoint;
 }
 async function rpc(payload:Record<string,unknown>):Promise<Reply>{
- const {target,origin}=await connect();const id=crypto.randomUUID();
- return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{requests.delete(id);reject(new Error('連線逾時，請按重試確認原操作。'));},45000);requests.set(id,{resolve,reject,timer});target.postMessage({type:'classroom-request',id,payload:{...payload,token:session}},origin);});
+ const url=await getEndpoint(),id=crypto.randomUUID(),channel=crypto.randomUUID();
+ return new Promise((resolve,reject)=>{
+  const frame=document.createElement('iframe'),form=document.createElement('form');frame.name=`classroom-${id}`;frame.title='Google 試算表連線';frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
+  Object.assign(frame.style,{position:'fixed',left:'0',top:'0',width:'320px',height:'240px',opacity:'0.01',clipPath:'inset(100%)',border:'0',pointerEvents:'none'});
+  const finish=()=>{clearTimeout(timer);window.removeEventListener('message',receive);frame.remove();};
+  const timer=setTimeout(()=>{finish();reject(new Error('連線逾時，請按重試確認原操作。'));},45000);
+  function receive(e:MessageEvent){if(e.data?.type!=='classroom-response'||e.data.channel!==channel||e.data.id!==id||!/^https:\/\/[a-z0-9-]+\.script\.googleusercontent\.com$/.test(e.origin))return;finish();resolve(e.data.reply);}
+  window.addEventListener('message',receive);form.method='POST';form.action=url;form.target=frame.name;
+  for(const [name,value] of Object.entries({channel,id,payload:JSON.stringify({...payload,token:session})})){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);}
+  document.body.append(frame,form);form.submit();form.remove();
+ });
 }
 async function verifier(password:string,salt:string){const input=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations:100000},input,256));}
 export async function apiFetch(path:string,options:RequestInit={}):Promise<Response>{

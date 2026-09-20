@@ -14,6 +14,13 @@ function doGet(e){
  const t=HtmlService.createTemplateFromFile('Bridge');t.channel=channel;t.allowedOrigin=origin;
  return t.evaluate().setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
+function doPost(e){
+ const origin=props_().getProperty('GITHUB_ORIGIN'),channel=e?.parameter?.channel||'',id=e?.parameter?.id||'';
+ if(!/^https:\/\/[a-zA-Z0-9-]+\.github\.io$/.test(origin||'')||!/^[a-f0-9-]{36}$/.test(channel)||!/^[a-f0-9-]{36}$/.test(id))return HtmlService.createHtmlOutput('無效的請求。');
+ let reply;try{reply=classroomRpc(JSON.parse(e?.parameter?.payload||'{}'));}catch(error){reply=reply_(503,{error:'Google 試算表暫時無法使用，請重試原操作。'});}
+ const message=JSON.stringify({type:'classroom-response',channel,id,reply}).replace(/</g,'\\u003c');
+ return HtmlService.createHtmlOutput('<script>window.top.postMessage('+message+','+JSON.stringify(origin)+');<\/script>').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
 // Only RPC is remotely callable. All privileged setup helpers end with an underscore.
 function classroomRpc(req){
  if(!req||JSON.stringify(req).length>12000)return reply_(400,{error:'資料格式不正確。'});
