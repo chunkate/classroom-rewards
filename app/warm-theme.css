@@ -158,6 +158,10 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
 .login-card { border:2px solid #edcfb8;border-radius:28px;background:#fffefb;box-shadow:0 9px 0 #ead8c5,0 24px 65px #815c3822; }
 .login-card p { color:#6c5a51; }
 .login-card input { border:2px solid #e4cdb9;border-radius:13px;background:#fffaf2; }
+.login-card .remember-device { display:flex;align-items:center;gap:10px;margin:14px 0;text-align:left;cursor:pointer; }
+.login-card .remember-device input { appearance:auto;width:20px;height:20px;margin:0;border:0;border-radius:4px;background:transparent;accent-color:#ed6f86;flex:0 0 auto; }
+.login-card .remember-device span { display:grid;gap:2px;line-height:1.25; }
+.login-card .remember-device small { color:#806f66;font-size:.82rem; }
 .account-toolbar { color:#675147;border-color:#ead5c1;background:#f8ecdd; }
 .account-toolbar span { color:#4e6658; }
 

@@ -29,7 +29,7 @@ function setup(){
  vm.runInContext(readFileSync(new URL('../apps-script/Code.gs',import.meta.url),'utf8'),ctx);
  const salt='a'.repeat(64),key=pbkdf2Sync('test-password-only',salt,100000,32,'sha256').toString('hex');props.set('PASSWORD_VERIFIER',salt+':'+key);ctx.initialize_();
  const rpc=r=>JSON.parse(JSON.stringify(ctx.classroomRpc(r)));
- const auth=(op='login',token='',next='')=>{const c=rpc({op:'challenge',purpose:op,token});assert.equal(c.status,200);return rpc({op,token,id:c.body.id,newVerifier:next,proof:createHmac('sha256',key).update(c.body.id+'|'+op+'|'+next).digest('hex')});};
+ const auth=(op='login',token='',next='',remember=false)=>{const c=rpc({op:'challenge',purpose:op,token});assert.equal(c.status,200);return rpc({op,token,id:c.body.id,newVerifier:next,remember,proof:createHmac('sha256',key).update(c.body.id+'|'+op+'|'+next).digest('hex')});};
  return {rpc,auth,props,cache,sheets,ctx,failFlush:()=>flushFail=true,failSummary:v=>summaryFail=v};
 }
 const command=(type,extra={})=>({id:randomUUID(),date:'2026-09-06',type,...extra});
@@ -70,6 +70,13 @@ test('GAS: valid checkpoints accelerate reads; corrupt checkpoints replay journa
 });
 test('GAS: changing password revokes old sessions and old challenges',()=>{
  const h=setup(),old=h.auth().body.token,next='b'.repeat(64)+':'+'c'.repeat(64);const r=h.auth('password',old,next);assert.equal(r.status,200);assert.equal(h.rpc({op:'read',token:old}).status,401);assert.equal(h.rpc({op:'read',token:r.body.token}).status,200);
+});
+test('GAS: remembered devices receive a 30-day session and logout revokes only that token',()=>{
+ const h=setup(),short=h.auth(),remembered=h.auth('login','','',true);
+ assert.equal(short.body.remember,false);assert.equal(remembered.body.remember,true);
+ assert.ok(short.body.expires-Date.now()<=21600000);assert.ok(remembered.body.expires-Date.now()>2500000000);
+ h.rpc({op:'logout',token:remembered.body.token});
+ assert.equal(h.rpc({op:'read',token:remembered.body.token}).status,401);assert.equal(h.rpc({op:'read',token:short.body.token}).status,200);
 });
 test('GAS: login attempts are limited and malformed baseline fails closed',()=>{
  const h=setup(),token=h.auth().body.token;for(let i=0;i<29;i++)assert.equal(h.rpc({op:'challenge',purpose:'login'}).status,200);assert.equal(h.rpc({op:'challenge',purpose:'login'}).status,429);

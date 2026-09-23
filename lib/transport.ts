@@ -2,7 +2,7 @@ import {applyCommand,type State,type Command} from './rewards';
 
 type Reply={status:number;body:Record<string,unknown>};
 let endpoint:Promise<string>|undefined;
-let session=sessionStorage.getItem('classroom-session')??'';
+let session=localStorage.getItem('classroom-session')??sessionStorage.getItem('classroom-session')??'';
 const visualPreview=import.meta.env.DEV&&new URLSearchParams(location.search).has('preview');
 const previewDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 let previewSnapshot:{state:State;revision:number}|undefined;
@@ -26,7 +26,7 @@ function previewReply(path:string,options:RequestInit){
  }
  return new Response(JSON.stringify(previewData()),{status:200,headers:{'Content-Type':'application/json'}});
 }
-function keepSession(value:string){session=value;if(value)sessionStorage.setItem('classroom-session',value);else sessionStorage.removeItem('classroom-session');}
+function keepSession(value:string,persistent=false){session=value;if(!value){sessionStorage.removeItem('classroom-session');localStorage.removeItem('classroom-session');}else if(persistent){localStorage.setItem('classroom-session',value);sessionStorage.removeItem('classroom-session');}else{sessionStorage.setItem('classroom-session',value);localStorage.removeItem('classroom-session');}}
 const hex=(bytes:ArrayBuffer)=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 async function getEndpoint(){
  if(!endpoint)endpoint=(async()=>{
@@ -62,10 +62,10 @@ export async function apiFetch(path:string,options:RequestInit={}):Promise<Respo
    }
    const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(keyHex),{name:'HMAC',hash:'SHA-256'},false,['sign']);
    const proof=hex(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`${id}|${body.action}|${newVerifier}`)));
-   result=await rpc({op:body.action,id,proof,newVerifier});
+   result=await rpc({op:body.action,id,proof,newVerifier,remember:body.action==='login'&&body.remember===true});
   }
  }else result=await rpc({op:path==='/api/auth'?(body.action==='logout'?'logout':'status'):(options.method==='POST'?'write':'read'),...body});
- if(typeof result.body.token==='string')keepSession(result.body.token);
+ if(typeof result.body.token==='string')keepSession(result.body.token,result.body.remember===true);
  if(result.status===401||body.action==='logout')keepSession('');
  return new Response(JSON.stringify(result.body),{status:result.status,headers:{'Content-Type':'application/json'}});
 }

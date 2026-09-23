@@ -6,8 +6,11 @@ function random_(){return Utilities.getUuid().replace(/-/g,'')+Utilities.getUuid
 function equal_(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
 function reply_(status,body){return {status,body};}
 function book_(){return SpreadsheetApp.openById(props_().getProperty('SPREADSHEET_ID'));}
-function session_(token){if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))return false;return CacheService.getScriptCache().get('session:'+hash_(token))===hash_(props_().getProperty('PASSWORD_VERIFIER')||'');}
-function login_(){const token=random_();CacheService.getScriptCache().put('session:'+hash_(token),hash_(props_().getProperty('PASSWORD_VERIFIER')),21600);return reply_(200,{authenticated:true,token});}
+function sessions_(){const p=props_(),now=Date.now();let saved={};try{saved=JSON.parse(p.getProperty('SESSIONS')||'{}');}catch(e){}let changed=false;for(const key in saved)if(!saved[key]||saved[key].expires<=now){delete saved[key];changed=true;}if(changed)p.setProperty('SESSIONS',JSON.stringify(saved));return saved;}
+function saveSessions_(saved){props_().setProperty('SESSIONS',JSON.stringify(saved));}
+function session_(token){if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))return false;const saved=sessions_(),entry=saved[hash_(token)],version=hash_(props_().getProperty('PASSWORD_VERIFIER')||'');return !!entry&&entry.expires>Date.now()&&entry.version===version;}
+function login_(remember){const token=random_(),saved=sessions_(),expires=Date.now()+(remember?2592000000:21600000);saved[hash_(token)]={expires,version:hash_(props_().getProperty('PASSWORD_VERIFIER')||'')};saveSessions_(saved);return reply_(200,{authenticated:true,token,remember:!!remember,expires});}
+function logout_(token){if(typeof token==='string'&&/^[a-f0-9]{64}$/.test(token)){const saved=sessions_();delete saved[hash_(token)];saveSessions_(saved);}return reply_(200,{authenticated:false});}
 function doGet(e){
  const callback=e?.parameter?.callback||'';
  if(callback){
@@ -56,11 +59,11 @@ function classroomRpc(req){
    if(req.op==='password'){
     if(!session_(req.token))return reply_(401,{error:'請重新登入。'});
     if(!/^[a-f0-9]{64}:[a-f0-9]{64}$/.test(next))return reply_(400,{error:'新密碼格式不正確。'});
-    p.setProperty('PASSWORD_VERIFIER',next);
+    p.setProperty('PASSWORD_VERIFIER',next);p.setProperty('SESSIONS','{}');
    }
-   return login_();
+   return login_(req.op==='login'&&req.remember===true);
   }
-  if(req.op==='logout'){if(typeof req.token==='string')cache.remove('session:'+hash_(req.token));return reply_(200,{authenticated:false});}
+  if(req.op==='logout')return logout_(req.token);
   if(!session_(req.token))return reply_(401,{error:'請先登入班級系統。'});
   if(!['read','write'].includes(req.op))return reply_(400,{error:'不支援的操作。'});
   const snapshot=read_();
