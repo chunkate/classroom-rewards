@@ -140,7 +140,11 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
 .activity-icon { color:#a74741;background:#ffe9e4;border-radius:12px; }
 .activity-icon.teal { color:#28664f;background:#e0f3e8; }
 .activity-icon.badge { color:#7a4c00;background:#ffe47b; }
-.activity-list { max-height:none;overflow:visible; }
+.activity-list { height:clamp(360px,58vh,680px);overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:#e58a78 #fff1df; }
+.activity-list::-webkit-scrollbar { width:12px; }
+.activity-list::-webkit-scrollbar-track { background:#fff1df;border-radius:999px; }
+.activity-list::-webkit-scrollbar-thumb { background:#e58a78;border:3px solid #fff1df;border-radius:999px; }
+.activity-list::-webkit-scrollbar-thumb:hover { background:#d56862; }
 .score-table-scroll { overflow-x:auto; }
 .score-table-scroll table { min-width:760px; }
 .badge-count { display:inline-flex;align-items:center;gap:4px;color:#8d5700;font-weight:800; }
@@ -175,6 +179,7 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
   .student { border-radius:16px; }
   .task-board,.task-sidebar { border-radius:18px; }
   .check-card { min-height:82px;border-radius:14px; }
+  .activity-list { height:clamp(320px,55vh,520px); }
 }
 
 @media(max-height:950px){
