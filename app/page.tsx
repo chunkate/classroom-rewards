@@ -6,9 +6,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Star, ClipboardCheck, History, Plus, Undo2, Download, CloudCheck, RefreshCw, Archive, Pencil, BookOpen, Award } from 'lucide-react';
-import { availableScores, getRound, initialState, redeemedScores, redemptionCounts, scores, scoresBetween, seats, today, weekRange, type Command, type State, type Task } from '@/lib/rewards';
+import { applyCommand, availableScores, getRound, initialState, redeemedScores, redemptionCounts, scores, scoresBetween, seats, today, weekRange, type Command, type State, type Task } from '@/lib/rewards';
 
 type Snapshot = { state:State; revision:number; warning?:string };
+type RewardJob = { revision:number; command:Command; message:string };
 const signed = (n:number) => n > 0 ? `+${n}` : String(n);
 function saveFile(name:string, text:string, type:string) { const url = URL.createObjectURL(new Blob([text], {type})); const a = document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 export default function Home() {
@@ -19,31 +20,54 @@ export default function Home() {
  const [dialog,setDialog]=useState(false), [edit,setEdit]=useState<Task|null>(null), [title,setTitle]=useState(''), [points,setPoints]=useState(1);
  const [redeemDialog,setRedeemDialog]=useState(false),[redeemStudent,setRedeemStudent]=useState(1),[redeemPoints,setRedeemPoints]=useState(10);
  const [pending,setPending]=useState<{revision:number;command:Command}|null>(null);
+ const [rewardSaving,setRewardSaving]=useState(0),[rewardPaused,setRewardPaused]=useState(false);
  const [drafts,setDrafts]=useState<Record<string,Record<number,boolean>>>({});
  const draftGroups=Object.entries(drafts).filter(([,values])=>Object.keys(values).length>0);
- useEffect(()=>{if(!draftGroups.length)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[draftGroups.length]);
- const lock=useRef(false); const current=snapshot.state;
+ useEffect(()=>{if(!draftGroups.length&&!rewardSaving)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[draftGroups.length,rewardSaving]);
+ const lock=useRef(false),snapshotRef=useRef(snapshot),rewardJobs=useRef<RewardJob[]>([]),rewardFlushing=useRef(false); const current=snapshot.state;
+ useEffect(()=>{snapshotRef.current=snapshot;},[snapshot]);
  const load=useCallback(async()=>{
   if(lock.current) return;
-  try { const r=await apiFetch('/api/classroom',{cache:'no-store'}); const data=await r.json() as Snapshot & {error?:string}; if(r.status===401)window.dispatchEvent(new Event("classroom-auth-expired")); if(!r.ok) throw new Error(data.error); setSnapshot(data);setLoaded(true);setError(''); }
+  try { const r=await apiFetch('/api/classroom',{cache:'no-store'}); const data=await r.json() as Snapshot & {error?:string}; if(r.status===401)window.dispatchEvent(new Event("classroom-auth-expired")); if(!r.ok) throw new Error(data.error); snapshotRef.current=data;setSnapshot(data);setLoaded(true);setError(''); }
   catch(e){setError((e as Error).message || '無法連線，請重試。');}
  },[]);
  useEffect(()=>{ let previous=today(); const start=setTimeout(()=>{setDate(previous);void load();},0); const timer=setInterval(()=>{const next=today();if(next!==previous){const old=previous;previous=next;setDate(d=>d===old?next:d);}},30000); return ()=>{clearTimeout(start);clearInterval(timer);}; },[load]);
  async function send(command:Omit<Command,'id'|'date'>, message:string, retry?:{revision:number;command:Command}) {
-  if(lock.current || (!loaded && !retry)) return false;
+  if(lock.current || rewardJobs.current.length>0 || (!loaded && !retry)) return false;
   lock.current=true;setBusy(true);setError('');
-  const payload=retry ?? {revision:snapshot.revision,command:{...command,id:crypto.randomUUID(),date}};
+  const payload=retry ?? {revision:snapshotRef.current.revision,command:{...command,id:crypto.randomUUID(),date}};
   let received=false;
   try {
    const r=await apiFetch('/api/classroom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
    const data=await r.json() as Snapshot & {error?:string}; if(r.status===401)window.dispatchEvent(new Event("classroom-auth-expired"));
    received=true;
-   if(!r.ok){if(data.state){setSnapshot(data);setDrafts(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>{const [day,id,roundId]=key.split(':');return getRound(data.state,day,id).id===roundId;})));setPending(null);} else if(r.status>=500) setPending(payload); else setPending(null);throw new Error(data.error || '儲存失敗');}
-   setSnapshot(data);setPending(null);setNotice(data.warning?`${message} ${data.warning}`:message);
+   if(!r.ok){if(data.state){snapshotRef.current=data;setSnapshot(data);setDrafts(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>{const [day,id,roundId]=key.split(':');return getRound(data.state,day,id).id===roundId;})));setPending(null);} else if(r.status>=500) setPending(payload); else setPending(null);throw new Error(data.error || '儲存失敗');}
+   snapshotRef.current=data;setSnapshot(data);setPending(null);setNotice(data.warning?`${message} ${data.warning}`:message);
    if(payload.command.type==='confirmRound'||payload.command.type==='clearRound'){const key=`${payload.command.date}:${payload.command.taskId}:${payload.command.roundId}`;setDrafts(previous=>{const next={...previous};delete next[key];return next;});}
    return true;
   } catch(e){if(!received) setPending(payload);setError((e as Error).message || '連線中斷，請重試。');return false;}
   finally{lock.current=false;setBusy(false);}
+ }
+ async function flushRewards(){
+  if(rewardFlushing.current||rewardJobs.current.length===0)return;
+  rewardFlushing.current=true;setRewardPaused(false);setError('');
+  try{
+   while(rewardJobs.current.length){
+    const job=rewardJobs.current[0];
+    try{
+     const r=await apiFetch('/api/classroom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:job.revision,command:job.command}),signal:AbortSignal.timeout(20000)});
+     const data=await r.json() as Snapshot & {error?:string};if(r.status===401)window.dispatchEvent(new Event('classroom-auth-expired'));
+     if(r.status===409&&data.state){
+      let optimistic:Snapshot={state:data.state,revision:data.revision,warning:data.warning};
+      for(const queued of rewardJobs.current){queued.revision=optimistic.revision;optimistic={...optimistic,state:applyCommand(optimistic.state,queued.command),revision:optimistic.revision+1};}
+      snapshotRef.current=optimistic;setSnapshot(optimistic);continue;
+     }
+     if(!r.ok)throw new Error(data.error||'背景儲存失敗');
+     rewardJobs.current.shift();setRewardSaving(rewardJobs.current.length);setNotice(data.warning?`${job.message} ${data.warning}`:job.message);
+     if(rewardJobs.current.length===0){snapshotRef.current=data;setSnapshot(data);}
+    }catch(e){setRewardPaused(true);setError(`${(e as Error).message||'連線中斷'} 畫面分數已保留，請按「重試背景儲存」。`);break;}
+   }
+  }finally{rewardFlushing.current=false;}
  }
  const week=date?weekRange(date):{start:'',end:''};
  const {total,daily,weekly,taskScores,classScores,redeemed,available,badges}=useMemo(()=>({total:scores(current),daily:scores(current,date),weekly:date?scoresBetween(current,week.start,week.end):scores(current,date),taskScores:scores(current,date,'check'),classScores:scores(current,date,'reward'),redeemed:redeemedScores(current),available:availableScores(current),badges:redemptionCounts(current)}),[current,date,week.start,week.end]);
@@ -63,10 +87,20 @@ export default function Home() {
  }
  const last=[...current.actions].reverse().find(a=>!a.undone);
  const actions=[...current.actions].reverse().filter(a=>a.date===date);
- const disabled=busy || !loaded || !!pending || !date;
+ const disabled=busy || rewardSaving>0 || !loaded || !!pending || !date;
+ const rewardDisabled=busy || !loaded || !!pending || rewardPaused || !date;
  function openTask(t?:Task){setEdit(t??null);setTitle(t?.title??'');setPoints(t?.points??1);setDialog(true);}
  async function submitTask(e:React.SyntheticEvent<HTMLFormElement>){e.preventDefault();const ok=await send({type:'task',taskId:edit?.id,title,points},edit?'項目已更新；既有完成獎勵維持原分數。':'檢核項目已新增。');if(ok)setDialog(false);}
- function reward(students:number[],amount:number){void send({type:'reward',students,amount,reason},`${students.length===30?'全班':`${students[0]} 號`} ${signed(amount)} 分，已儲存。`);}
+ function reward(students:number[],amount:number){
+  if(rewardDisabled)return;
+  const command:Command={type:'reward',students,amount,reason,id:crypto.randomUUID(),date};
+  const base=snapshotRef.current;
+  try{
+   const optimistic:Snapshot={...base,state:applyCommand(base.state,command),revision:base.revision+1};
+   snapshotRef.current=optimistic;setSnapshot(optimistic);rewardJobs.current.push({revision:base.revision,command,message:`${students.length===30?'全班':`${students[0]} 號`} ${signed(amount)} 分，已儲存。`});
+   setRewardSaving(rewardJobs.current.length);setNotice('分數已立即更新，正在背景儲存…');setError('');void flushRewards();
+  }catch(e){setError((e as Error).message||'加扣分資料不正確。');}
+ }
  async function redeem(e:React.SyntheticEvent<HTMLFormElement>){e.preventDefault();const ok=await send({type:'redeem',student:redeemStudent,amount:redeemPoints},`${redeemStudent} 號已兌換 ${redeemPoints} 點獎勵章。`);if(ok)setRedeemDialog(false);}
  function exportCSV(){
   const dates=[...new Set(current.actions.filter(a=>!a.undone).map(a=>a.date))].sort();
@@ -77,17 +111,17 @@ export default function Home() {
   saveFile(`班級分數-${today()}.csv`,'\uFEFF'+rows.map(r=>r.join(',')).join('\r\n'),'text/csv;charset=utf-8');
  }
  return <main className={`classroom ${view==='rewards'?'reward-view':''}`}>
-  <header className="masthead"><div className="brand-mark"><Star/></div><div><p className="eyebrow">每一天的努力，都值得記錄</p><h1>高老師的班級獎勵簿</h1></div><span className="class-chip">全班 30 人</span><div className="save-status" aria-live="polite">{busy?<RefreshCw size={16}/>:<CloudCheck size={16}/>} {busy?'儲存中':loaded?'已連接雲端紀錄':'正在讀取'}</div></header>
-  <Tabs value={view} onValueChange={v=>setView(String(v))}><div className="topbar"><TabsList className="main-tabs"><TabsTrigger value="rewards"><Star/>課堂獎勵</TabsTrigger><TabsTrigger value="tasks"><ClipboardCheck/>任務檢核</TabsTrigger><TabsTrigger value="history"><History/>每日紀錄</TabsTrigger></TabsList><div className="date-control"><label htmlFor="record-date">紀錄日期</label><input id="record-date" type="date" value={date} max={today()} disabled={busy || !!pending} onChange={e=>{if(e.target.value)setDate(e.target.value);}}/>{date!==today()&&<button className="text-button" onClick={()=>setDate(today())} disabled={busy}>回到今天</button>}</div></div>
+  <header className="masthead"><div className="brand-mark"><Star/></div><div><p className="eyebrow">每一天的努力，都值得記錄</p><h1>高老師的班級獎勵簿</h1></div><span className="class-chip">全班 30 人</span><div className={`save-status ${busy||rewardSaving>0?'saving':''} ${rewardPaused?'save-paused':''}`} aria-live="polite">{busy||rewardSaving>0?<RefreshCw size={16}/>:<CloudCheck size={16}/>} {rewardPaused?'等待重試':rewardSaving>0?`背景儲存 ${rewardSaving} 筆`:busy?'儲存中':loaded?'已連接雲端紀錄':'正在讀取'}</div></header>
+  <Tabs value={view} onValueChange={v=>setView(String(v))}><div className="topbar"><TabsList className="main-tabs"><TabsTrigger value="rewards"><Star/>課堂獎勵</TabsTrigger><TabsTrigger value="tasks"><ClipboardCheck/>任務檢核</TabsTrigger><TabsTrigger value="history"><History/>每日紀錄</TabsTrigger></TabsList><div className="date-control"><label htmlFor="record-date">紀錄日期</label><input id="record-date" type="date" value={date} max={today()} disabled={busy || rewardSaving>0 || !!pending} onChange={e=>{if(e.target.value)setDate(e.target.value);}}/>{date!==today()&&<button className="text-button" onClick={()=>setDate(today())} disabled={busy || rewardSaving>0}>回到今天</button>}</div></div>
   {date && date!==today()&&<div className="date-banner">目前查看 {date} 的紀錄；加扣分與檢核也會記在這一天。</div>}
-  {error&&<div className="error-box" role="alert"><span>{error}</span><button className="action" disabled={busy} onClick={()=>pending?void send(pending.command,'原操作已確認儲存。',pending):void load()}><RefreshCw/>重試{pending?'原操作':'讀取'}</button></div>}
+  {error&&<div className="error-box" role="alert"><span>{error}</span><button className="action" disabled={busy} onClick={()=>rewardPaused?void flushRewards():pending?void send(pending.command,'原操作已確認儲存。',pending):void load()}><RefreshCw/>{rewardPaused?'重試背景儲存':`重試${pending?'原操作':'讀取'}`}</button></div>}
   <output className="status-line">{notice || '課堂加扣分自動儲存；任務檢核請按確定。每日分數持續累積。'}</output>
   {draftGroups.length>0&&<div className="draft-summary"><span>尚有 {draftGroups.length} 組檢核未確定：</span>{draftGroups.map(([key])=>{const [day,id]=key.split(':');return <button key={key} className="text-button" disabled={disabled} onClick={()=>{setDate(day);setSelected(id);setView('tasks');setShowArchived(true);}}>{day} · {current.tasks.find(t=>t.id===id)?.title??'檢核項目'}</button>;})}</div>}
   {!loaded?<section className="empty-panel"><BookOpen/><h2>{error?'暫時無法讀取班級紀錄':'正在開啟班級紀錄'}</h2><p>讀取完成後即可開始使用。</p></section>:<>
   <TabsContent value="rewards">
    <section className="section-heading"><div><p className="eyebrow">CLASSROOM REWARDS</p><h2>把好表現，變成一點鼓勵。</h2><p className="week-label">本週 {week.start.slice(5).replace('-','/')}～{week.end.slice(5).replace('-','/')}（星期一至星期日）</p></div><div className="summary-mini"><span>本週全班合計 <strong>{signed(seats.reduce((s,n)=>s+weekly[n],0))}</strong></span></div></section>
-   <section className="reward-toolbar"><div className="reward-reason"><label htmlFor="reason">獎勵／扣分原因</label><input id="reason" placeholder="例如：專心聽講、主動協助" maxLength={100} value={reason} onChange={e=>setReason(e.target.value)}/></div><div className="batch-buttons"><span className="small-label">全班一起</span>{[1,2,5,-1,-2].map(n=><button key={n} className={`action ${n>0?'positive':'negative'}`} disabled={disabled} onClick={()=>reward(seats,n)}>{signed(n)}</button>)}</div><div className="step-control"><label htmlFor="step">個別每次分數</label><input id="step" type="number" min="1" max="100" step="1" value={step} onChange={e=>setStep(Number(e.target.value))}/></div></section>
-   <div className="student-grid">{seats.map(n=><article className="student" key={n}><div className="student-head"><span className="seat">{String(n).padStart(2,'0')}</span><span>號</span></div><div className={`score weekly-score ${weekly[n]<0?'below-zero':''}`}>{signed(weekly[n])}<span>本週累計</span></div><div className="student-bottom weekly-only"><button aria-label={`${n} 號扣 ${step} 分`} disabled={disabled || !Number.isInteger(step) || step<1 || step>100} onClick={()=>reward([n],-step)}>−</button><button aria-label={`${n} 號加 ${step} 分`} disabled={disabled || !Number.isInteger(step) || step<1 || step>100} onClick={()=>reward([n],step)}>＋</button></div></article>)}</div>
+   <section className="reward-toolbar"><div className="reward-reason"><label htmlFor="reason">獎勵／扣分原因</label><input id="reason" placeholder="例如：專心聽講、主動協助" maxLength={100} value={reason} onChange={e=>setReason(e.target.value)}/></div><div className="batch-buttons"><span className="small-label">全班一起</span>{[1,2,5,-1,-2].map(n=><button key={n} className={`action ${n>0?'positive':'negative'}`} disabled={rewardDisabled} onClick={()=>reward(seats,n)}>{signed(n)}</button>)}</div><div className="step-control"><label htmlFor="step">個別每次分數</label><input id="step" type="number" min="1" max="100" step="1" value={step} onChange={e=>setStep(Number(e.target.value))}/></div></section>
+   <div className="student-grid">{seats.map(n=><article className="student" key={n}><div className="student-head"><span className="seat">{String(n).padStart(2,'0')}</span><span>號</span></div><div className={`score weekly-score ${weekly[n]<0?'below-zero':''}`}>{signed(weekly[n])}<span>本週累計</span></div><div className="student-bottom weekly-only"><button aria-label={`${n} 號扣 ${step} 分`} disabled={rewardDisabled || !Number.isInteger(step) || step<1 || step>100} onClick={()=>reward([n],-step)}>−</button><button aria-label={`${n} 號加 ${step} 分`} disabled={rewardDisabled || !Number.isInteger(step) || step<1 || step>100} onClick={()=>reward([n],step)}>＋</button></div></article>)}</div>
   </TabsContent>
   <TabsContent value="tasks">
    <section className="section-heading"><div><p className="eyebrow">DAILY CHECKLIST</p><h2>一個項目，一眼掌握。</h2></div><button className="action primary" disabled={disabled} onClick={()=>openTask()}><Plus/>新增檢核項目</button></section>

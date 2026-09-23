@@ -53,6 +53,9 @@ button:focus-visible,input:focus-visible { outline:3px solid #ffc2b9;outline-off
 h1,h2,h3 { color:#473830;letter-spacing:.015em; }
 .class-chip { color:#633923;border-color:#e8ab49;background:#fff5b9;box-shadow:0 3px 0 #d59c3e;font-weight:700; }
 .save-status { color:#164f40;background:#c8f3e4;padding:8px 12px;border:1px solid #4fbd9a;border-radius:999px;font-weight:700; }
+.save-status.saving svg { animation:save-spin .9s linear infinite; }
+.save-status.save-paused { color:#8b421f;background:#ffe4ca;border-color:#ed9c68; }
+@keyframes save-spin { to { transform:rotate(360deg); } }
 
 .main-tabs { padding:5px!important;background:#ffd447!important;border:1px solid #dba623;border-radius:15px; }
 .main-tabs [data-slot=tabs-trigger] { border-radius:11px;color:#70594d;font-weight:800; }
