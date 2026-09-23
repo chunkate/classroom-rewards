@@ -79,11 +79,11 @@ export default function Home() {
  const draft=drafts[draftKey]??{};
  const completed=round.confirmed?round.students:seats.filter(n=>draft[n]??false);
  const hasDraft=Object.keys(draft).length>0;
- function toggleCheck(student:number){if(disabled || !task || task.archived || round.confirmed)return;setDrafts(previous=>{const next={...previous[draftKey]};if(next[student])delete next[student];else next[student]=true;return {...previous,[draftKey]:next};});}
+ function toggleCheck(student:number){if(rewardDisabled || !task || task.archived || round.confirmed)return;setDrafts(previous=>{const next={...previous[draftKey]};if(next[student])delete next[student];else next[student]=true;return {...previous,[draftKey]:next};});}
  function clearDraft(){
   if(!task)return;
   if(!round.confirmed){setDrafts(previous=>{const next={...previous};delete next[draftKey];return next;});setError('');setNotice('本輪尚未確定的座號已清除。');return;}
-  void send({type:'clearRound',taskId:task.id,roundId:round.id},'畫面已清除，可以開始新一輪。已儲存的分數與紀錄保留。');
+  queueBackground({type:'clearRound',taskId:task.id,roundId:round.id},'畫面已清除，可以開始新一輪。已儲存的分數與紀錄保留。');
  }
  const last=[...current.actions].reverse().find(a=>!a.undone);
  const actions=[...current.actions].reverse().filter(a=>a.date===date);
@@ -91,16 +91,18 @@ export default function Home() {
  const rewardDisabled=busy || !loaded || !!pending || rewardPaused || !date;
  function openTask(t?:Task){setEdit(t??null);setTitle(t?.title??'');setPoints(t?.points??1);setDialog(true);}
  async function submitTask(e:React.SyntheticEvent<HTMLFormElement>){e.preventDefault();const ok=await send({type:'task',taskId:edit?.id,title,points},edit?'項目已更新；既有完成獎勵維持原分數。':'檢核項目已新增。');if(ok)setDialog(false);}
- function reward(students:number[],amount:number){
+ function queueBackground(input:Omit<Command,'id'|'date'>,message:string){
   if(rewardDisabled)return;
-  const command:Command={type:'reward',students,amount,reason,id:crypto.randomUUID(),date};
+  const command:Command={...input,id:crypto.randomUUID(),date};
   const base=snapshotRef.current;
   try{
    const optimistic:Snapshot={...base,state:applyCommand(base.state,command),revision:base.revision+1};
-   snapshotRef.current=optimistic;setSnapshot(optimistic);rewardJobs.current.push({revision:base.revision,command,message:`${students.length===30?'全班':`${students[0]} 號`} ${signed(amount)} 分，已儲存。`});
-   setRewardSaving(rewardJobs.current.length);setNotice('分數已立即更新，正在背景儲存…');setError('');void flushRewards();
-  }catch(e){setError((e as Error).message||'加扣分資料不正確。');}
+   snapshotRef.current=optimistic;setSnapshot(optimistic);rewardJobs.current.push({revision:base.revision,command,message});
+   if(command.type==='confirmRound'||command.type==='clearRound'){const key=`${command.date}:${command.taskId}:${command.roundId}`;setDrafts(previous=>{const next={...previous};delete next[key];return next;});}
+   setRewardSaving(rewardJobs.current.length);setNotice('畫面已立即更新，正在背景儲存…');setError('');void flushRewards();
+  }catch(e){setError((e as Error).message||'操作資料不正確。');}
  }
+ function reward(students:number[],amount:number){queueBackground({type:'reward',students,amount,reason},`${students.length===30?'全班':`${students[0]} 號`} ${signed(amount)} 分，已儲存。`);}
  async function redeem(e:React.SyntheticEvent<HTMLFormElement>){e.preventDefault();const ok=await send({type:'redeem',student:redeemStudent,amount:redeemPoints},`${redeemStudent} 號已兌換 ${redeemPoints} 點獎勵章。`);if(ok)setRedeemDialog(false);}
  function exportCSV(){
   const dates=[...new Set(current.actions.filter(a=>!a.undone).map(a=>a.date))].sort();
@@ -128,9 +130,9 @@ export default function Home() {
    <div className="task-layout"><aside className="task-sidebar"><div className="sidebar-title">檢核項目 <span>{activeTasks.length}</span></div>{visibleTasks.length===0&&<p className="muted">尚未新增項目</p>}{visibleTasks.map(t=>{const taskRound=getRound(current,date,t.id);const count=taskRound.students.length;return <button className={`task-option ${task?.id===t.id?'selected':''}`} key={t.id} onClick={()=>setSelected(t.id)}><span>{t.title}{t.archived&&<small>已封存</small>}{Object.keys(drafts[`${date}:${t.id}:${taskRound.id}`]??{}).length>0&&<small className="draft-label">尚未確定</small>}</span><span className="task-count">{count}/30</span></button>;})}<label className="check-label" htmlFor="show-archived"><Checkbox id="show-archived" checked={showArchived} onCheckedChange={v=>setShowArchived(v)}/>顯示已封存項目</label></aside>
    <section className={`task-board task-tone-${taskTone}`}>{task?<>
     <div className="task-board-heading"><div><h3>{task.title}</h3><p>每人 +{task.points} 分 · 第 {round.number} 輪</p></div></div>
-    <div className="round-toolbar"><div className="inline-actions"><button className="action primary" disabled={disabled || task.archived || round.confirmed || completed.length===0} onClick={()=>void send({type:'confirmRound',taskId:task.id,roundId:round.id,students:completed},'本輪分數已存入總表。按清除即可開始下一輪。')}>確定</button><button className="action" disabled={disabled || task.archived} onClick={clearDraft}>清除</button></div><span>{round.confirmed?'本輪已儲存，請按清除開始下一輪。':'點選座號，再按確定儲存本輪分數。'}</span></div>
+    <div className="round-toolbar"><div className="inline-actions"><button className="action primary" disabled={rewardDisabled || task.archived || round.confirmed || completed.length===0} onClick={()=>queueBackground({type:'confirmRound',taskId:task.id,roundId:round.id,students:completed},'本輪分數已存入總表。按清除即可開始下一輪。')}>確定</button><button className="action" disabled={rewardDisabled || task.archived} onClick={clearDraft}>清除</button></div><span>{round.confirmed?'本輪已儲存，請按清除開始下一輪。':'點選座號，再按確定儲存本輪分數。'}</span></div>
     {task.archived&&<p className="date-banner">這個項目已封存，恢復後即可繼續檢核。</p>}
-    <div className="check-grid round-grid">{seats.map(n=><button key={n} aria-pressed={completed.includes(n)} aria-label={`${n} 號`} className={`check-card ${completed.includes(n)?'complete':''}`} disabled={disabled || task.archived || round.confirmed} onClick={()=>toggleCheck(n)}><span className="check-seat">{n}</span></button>)}</div>
+    <div className="check-grid round-grid">{seats.map(n=><button key={n} aria-pressed={completed.includes(n)} aria-label={`${n} 號`} className={`check-card ${completed.includes(n)?'complete':''}`} disabled={rewardDisabled || task.archived || round.confirmed} onClick={()=>toggleCheck(n)}><span className="check-seat">{n}</span></button>)}</div>
     <p className="batch-note">確定前按清除會取消本輪選取；確定入帳後按清除會開始下一輪，已存入總表的分數會保留。隔天也會自動開始新的檢核。</p>
     <div className="inline-actions"><button className="icon-action" aria-label="編輯檢核項目" onClick={()=>openTask(task)} disabled={disabled || hasDraft}><Pencil size={18}/></button><button className="action" disabled={disabled || hasDraft} onClick={()=>void send({type:'archive',taskId:task.id,archived:!task.archived},task.archived?'項目已恢復。':'項目已封存，歷史分數仍保留。')}><Archive/>{task.archived?'恢復':'封存'}</button></div>
    </>:<div className="empty-panel"><ClipboardCheck/><h3>從今天的第一個任務開始</h3><p>新增一次，同一項目可每天、每節課重複使用。</p><button className="action primary" disabled={disabled} onClick={()=>openTask()}><Plus/>新增檢核項目</button></div>}</section></div>
