@@ -63,6 +63,13 @@ test('GAS: redemption projects gross, redeemed, available, and badge count',()=>
  write(command('reward',{students:[1],amount:35}));const redeem=command('redeem',{student:1,amount:20});write(redeem);let row=h.sheets.get('累積總分').rows[1];assert.deepEqual(row.slice(3,7),[35,20,15,1]);
  write(command('undo',{actionId:redeem.id}));row=h.sheets.get('累積總分').rows[1];assert.deepEqual(row.slice(3,7),[35,0,35,0]);
 });
+test('GAS: batch redemption writes all selected student summaries',()=>{
+ const h=setup(),token=h.auth().body.token;let revision=0;const write=c=>{const r=h.rpc({op:'write',token,revision,command:c});assert.equal(r.status,200);revision=r.body.revision;return r.body;};
+ write(command('reward',{students:[1,2,3],amount:30}));write(command('redeem',{students:[1,3],amount:20}));
+ assert.deepEqual(h.sheets.get('累積總分').rows[1].slice(3,7),[30,20,10,1]);
+ assert.deepEqual(h.sheets.get('累積總分').rows[2].slice(3,7),[30,0,30,0]);
+ assert.deepEqual(h.sheets.get('累積總分').rows[3].slice(3,7),[30,20,10,1]);
+});
 test('GAS: valid checkpoints accelerate reads; corrupt checkpoints replay journal',()=>{
  const h=setup(),token=h.auth().body.token;for(let i=0;i<26;i++)assert.equal(h.rpc({op:'write',token,revision:i,command:command('reward',{students:[1],amount:1})}).status,200);
  assert.equal(h.rpc({op:'read',token}).body.revision,26);assert.equal(h.sheets.get('讀取快照').rows[0][0],25);

@@ -75,6 +75,14 @@ test('redemption preserves gross semester points, records badge count, and can b
  assert.throws(()=>applyCommand(s,cmd('redeem',{student:1,amount:20})));assert.throws(()=>applyCommand(s,cmd('redeem',{student:1,amount:15})));
  s=applyCommand(s,cmd('undo',{actionId:redeem.id}));assert.equal(scores(s)[1],35);assert.equal(redeemedScores(s)[1],0);assert.equal(availableScores(s)[1],35);assert.equal(redemptionCounts(s)[1],0);
 });
+test('batch redemption updates every selected student atomically',()=>{
+ let s=initialState();s=applyCommand(s,cmd('reward',{students:[1,2,3],amount:35}));const redeem=cmd('redeem',{students:[1,3],amount:20});s=applyCommand(s,redeem);
+ assert.deepEqual([redeemedScores(s)[1],redeemedScores(s)[2],redeemedScores(s)[3]],[20,0,20]);
+ assert.deepEqual([availableScores(s)[1],availableScores(s)[2],availableScores(s)[3]],[15,35,15]);
+ assert.deepEqual(s.actions.at(-1).redemptionDetails,[{student:1,balanceAfter:15,redemptionNumber:1},{student:3,balanceAfter:15,redemptionNumber:1}]);
+ assert.throws(()=>applyCommand(s,cmd('redeem',{students:[1,2],amount:20})),/1 號/);
+ assert.deepEqual([redeemedScores(s)[1],redeemedScores(s)[2]],[20,0]);
+});
 test('weekly totals use Monday through Sunday without deleting earlier scores',()=>{
  let s=initialState();for(const [date,amount] of [['2026-08-30',1],['2026-08-31',2],['2026-09-06',3],['2026-09-07',4]])s=applyCommand(s,cmd('reward',{students:[1],amount},date));
  assert.deepEqual(weekRange('2026-09-05'),{start:'2026-08-31',end:'2026-09-06'});assert.equal(scoresBetween(s,'2026-08-31','2026-09-06')[1],5);assert.equal(scores(s)[1],10);

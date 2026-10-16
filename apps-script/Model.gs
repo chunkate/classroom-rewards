@@ -59,15 +59,20 @@ function applyCommand(current, cmd) {
         s.actions.push(action);
     }
     else if (cmd.type === 'redeem') {
-        assert(seats.includes(cmd.student), '請選擇有效座號');
+        const students = Array.isArray(cmd.students) ? cmd.students : (seats.includes(cmd.student) ? [cmd.student] : []);
+        assert(students.length > 0 && students.length <= 30 && students.every(n => seats.includes(n)) && new Set(students).size === students.length, '請選擇有效座號');
         assert([10, 20, 30].includes(cmd.amount), '每次可兌換 10、20 或 30 點');
-        const balance = availableScores(s)[cmd.student];
-        assert(balance >= cmd.amount, `${cmd.student} 號目前可用 ${balance} 點，不足以兌換 ${cmd.amount} 點`);
+        const balances = availableScores(s), counts = redemptionCounts(s);
+        const insufficient = students.filter(student => balances[student] < cmd.amount);
+        assert(insufficient.length === 0, `${insufficient.map(n => `${n} 號`).join('、')}可用點數不足 ${cmd.amount} 點`);
         action.kind = 'redeem';
         action.reason = `兌換 ${cmd.amount} 點獎勵章`;
-        action.entries = [{ student: cmd.student, amount: -cmd.amount }];
-        action.balanceAfter = balance - cmd.amount;
-        action.redemptionNumber = redemptionCounts(s)[cmd.student] + 1;
+        action.entries = students.map(student => ({ student, amount: -cmd.amount }));
+        action.redemptionDetails = students.map(student => ({ student, balanceAfter: balances[student] - cmd.amount, redemptionNumber: counts[student] + 1 }));
+        if (students.length === 1) {
+            action.balanceAfter = action.redemptionDetails[0].balanceAfter;
+            action.redemptionNumber = action.redemptionDetails[0].redemptionNumber;
+        }
         s.actions.push(action);
     }
     else if (cmd.type === 'check') {

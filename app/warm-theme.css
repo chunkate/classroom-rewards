@@ -155,6 +155,19 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
 .redeem-options { display:grid;grid-template-columns:repeat(3,1fr);gap:9px; }
 .redeem-options button { min-height:50px;border:2px solid #d8b435;border-radius:13px;background:#ffe88a;color:#5f4617;font-size:17px;font-weight:800;box-shadow:0 4px 0 #cda72e; }
 .redeem-options button.selected { color:#fff;background:#b72f48;border-color:#8c2438;box-shadow:0 4px 0 #741d2e; }
+.redeem-dialog { max-width:720px!important; }
+.redeem-select-heading { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.redeem-select-heading span { color:#8e263d;font-size:14px;font-weight:800; }
+.redeem-select-actions { display:flex;gap:7px;flex-wrap:wrap; }
+.redeem-select-actions .action { min-height:36px;padding:7px 11px; }
+.redeem-student-grid { display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px; }
+.redeem-student-grid button { min-width:0;padding:7px 1px 6px;border:2px solid #ead8c7;border-radius:11px;background:#fffaf2;color:#5a463a;box-shadow:0 3px 0 #ead8c7; }
+.redeem-student-grid button b { display:block;font-size:19px;line-height:1; }
+.redeem-student-grid button span { display:block;margin-top:4px;font-size:9px;white-space:nowrap; }
+.redeem-student-grid button.selected { color:#fff;background:#ef6681;border-color:#c93d5a;box-shadow:0 3px 0 #a92d48; }
+.redeem-student-grid button.insufficient { border-color:#e5a1a1;background:#fff1ef;color:#9a3d3d; }
+.redeem-student-grid button.selected.insufficient { background:#bd3d4e;border-color:#8e263d;color:#fff; }
+.redeem-submit { width:100%;justify-content:center; }
 
 .date-banner,.draft-summary { color:#6e4c18;border-color:#e2c47c;border-radius:14px;background:#fff3cf; }
 .error-box,.auth-error { color:#923a36!important;border-color:#e9aaa1;border-radius:14px;background:#ffe9e4; }
@@ -180,6 +193,10 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
   .task-board,.task-sidebar { border-radius:18px; }
   .check-card { min-height:82px;border-radius:14px; }
   .activity-list { height:clamp(320px,55vh,520px); }
+  .redeem-dialog { max-height:92vh;overflow:auto; }
+  .redeem-student-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .redeem-select-actions .action { flex:1;font-size:12px;padding:6px; }
+  .redeem-student-grid button { padding:8px 2px; }
 }
 
 @media(max-height:950px){

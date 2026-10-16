@@ -2,7 +2,8 @@ export type Task = { id: string; title: string; points: number; archived: boolea
 export type Entry = { student: number; amount: number };
 export type CheckChange = { key: string; before: number | null; after: number | null };
 export type Round = { id:string; number:number; students:number[]; confirmed:boolean };
-export type Action = { id: string; date: string; time: string; kind: 'reward' | 'check' | 'redeem'; reason: string; entries: Entry[]; undone: boolean; check?: CheckChange; checks?: CheckChange[]; round?:{key:string;id:string}; balanceAfter?:number; redemptionNumber?:number };
+export type RedemptionDetail = { student:number; balanceAfter:number; redemptionNumber:number };
+export type Action = { id: string; date: string; time: string; kind: 'reward' | 'check' | 'redeem'; reason: string; entries: Entry[]; undone: boolean; check?: CheckChange; checks?: CheckChange[]; round?:{key:string;id:string}; balanceAfter?:number; redemptionNumber?:number; redemptionDetails?:RedemptionDetail[] };
 export type State = { tasks: Task[]; checks: Record<string, number>; actions: Action[]; applied: string[]; rounds?:Record<string,Round> };
 export type Command = { id: string; date: string; type: string; taskId?: string; title?: string; points?: number; students?: number[]; amount?: number; reason?: string; student?: number; completed?: boolean; actionId?: string; archived?: boolean; changes?: {student:number;completed:boolean}[]; roundId?:string };
 export const seats = Array.from({ length: 30 }, (_, i) => i + 1);
@@ -42,11 +43,16 @@ export function applyCommand(current: State, cmd: Command): State {
   assert(cmd.reason === undefined || (typeof cmd.reason === 'string' && cmd.reason.length <= 100), '原因最多 100 字');
   action.reason = cmd.reason?.trim() || '課堂表現'; action.entries = cmd.students.map(student => ({ student, amount:cmd.amount! })); s.actions.push(action);
  } else if(cmd.type==='redeem'){
-  assert(seats.includes(cmd.student!),'請選擇有效座號');
+  const students=Array.isArray(cmd.students)?cmd.students:(seats.includes(cmd.student!)?[cmd.student!]:[]);
+  assert(students.length>0&&students.length<=30&&students.every(n=>seats.includes(n))&&new Set(students).size===students.length,'請選擇有效座號');
   assert([10,20,30].includes(cmd.amount!),'每次可兌換 10、20 或 30 點');
-  const balance=availableScores(s)[cmd.student!];
-  assert(balance>=cmd.amount!,`${cmd.student} 號目前可用 ${balance} 點，不足以兌換 ${cmd.amount} 點`);
-  action.kind='redeem';action.reason=`兌換 ${cmd.amount} 點獎勵章`;action.entries=[{student:cmd.student!,amount:-cmd.amount!}];action.balanceAfter=balance-cmd.amount!;action.redemptionNumber=redemptionCounts(s)[cmd.student!]+1;s.actions.push(action);
+  const balances=availableScores(s),counts=redemptionCounts(s);
+  const insufficient=students.filter(student=>balances[student]<cmd.amount!);
+  assert(insufficient.length===0,`${insufficient.map(n=>`${n} 號`).join('、')}可用點數不足 ${cmd.amount} 點`);
+  action.kind='redeem';action.reason=`兌換 ${cmd.amount} 點獎勵章`;action.entries=students.map(student=>({student,amount:-cmd.amount!}));
+  action.redemptionDetails=students.map(student=>({student,balanceAfter:balances[student]-cmd.amount!,redemptionNumber:counts[student]+1}));
+  if(students.length===1){action.balanceAfter=action.redemptionDetails[0].balanceAfter;action.redemptionNumber=action.redemptionDetails[0].redemptionNumber;}
+  s.actions.push(action);
  } else if (cmd.type === 'check') {
   assert(!s.rounds?.[`${cmd.date}:${cmd.taskId}`], '檢核已更新為每輪計分，請重新整理頁面');
   assert(task && !task.archived && seats.includes(cmd.student!) && typeof cmd.completed === 'boolean', '檢核資料不正確');
