@@ -129,6 +129,8 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
 .check-seat { color:#57463d; }
 .round-grid .check-card.complete { background:var(--task-selected);border-color:var(--task-selected-border);box-shadow:0 4px 0 var(--task-selected-shadow); }
 .round-grid .check-card.complete .check-seat { color:#2f2622; }
+.round-grid.deduction-grid .check-card.complete { background:#f5a8a0;border-color:#b7484b;box-shadow:0 4px 0 #a94a4c; }
+.round-grid.deduction-grid .check-card.complete .check-seat { color:#5f2024; }
 .icon-action { border:2px solid #e4cfbb;border-radius:12px;background:#fffdf8;box-shadow:0 3px 0 #e8d7c5; }
 
 .table-panel,.activity-panel,.empty-panel { border:2px solid #ead8c6;border-radius:20px;background:#fffefb;box-shadow:0 7px 0 #efe1d2; }

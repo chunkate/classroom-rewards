@@ -59,6 +59,17 @@ test('round confirm is idempotent, clear preserves scores, and the next round ca
  s=applyCommand(s,cmd('confirmRound',{taskId:t.id,roundId:clear.id,students:[1]}));assert.equal(scores(s)[1],4);assert.equal(scores(s)[2],2);assert.equal(s.actions.length,2);
  s=applyCommand(s,cmd('confirmRound',{taskId:t.id,roundId:'initial',students:[1]},'2026-09-06'));assert.equal(scores(s)[1],6);assert.equal(scores(s,'2026-09-05')[1],4);
 });
+test('negative checklist points apply only to selected seats and persist across rounds',()=>{
+ let s=initialState();const t=cmd('task',{title:'未交作業',points:-2});s=applyCommand(s,t);
+ const first=cmd('confirmRound',{taskId:t.id,roundId:'initial',students:[3,8]});s=applyCommand(s,first);
+ assert.equal(scores(s)[3],-2);assert.equal(scores(s)[8],-2);assert.equal(scores(s)[1],0);
+ const clear=cmd('clearRound',{taskId:t.id,roundId:'initial'});s=applyCommand(s,clear);
+ s=applyCommand(s,cmd('confirmRound',{taskId:t.id,roundId:clear.id,students:[3]}));
+ assert.equal(scores(s)[3],-4);assert.equal(scores(s)[8],-2);
+ s=applyCommand(s,cmd('task',{taskId:t.id,title:'未交作業',points:-5}));
+ assert.equal(scores(s)[3],-4);
+ for(const points of [-101,101,-1.5])assert.throws(()=>applyCommand(s,cmd('task',{title:'無效',points})));
+});
 test('legacy daily checks remain credited after switching to rounds and clearing',()=>{
  let s=initialState();const t=cmd('task',{title:'作業',points:1});s=applyCommand(s,t);s=applyCommand(s,cmd('check',{taskId:t.id,student:1,completed:true}));const clear=cmd('clearRound',{taskId:t.id,roundId:'initial'});s=applyCommand(s,clear);assert.equal(scores(s)[1],1);
  s=applyCommand(s,cmd('confirmRound',{taskId:t.id,roundId:clear.id,students:[1]}));assert.equal(scores(s)[1],2);assert.throws(()=>applyCommand(s,cmd('checkBatch',{taskId:t.id,changes:[{student:1,completed:false}]})));

@@ -31,7 +31,7 @@ export function applyCommand(current: State, cmd: Command): State {
  const action: Action = { id: cmd.id, date: cmd.date, time: new Date().toISOString(), kind: 'reward', reason: '', entries: [], undone: false };
  if (cmd.type === 'task') {
   assert(typeof cmd.title === 'string' && cmd.title.trim().length > 0 && cmd.title.trim().length <= 60, '請輸入 1～60 字的項目名稱');
-  assert(Number.isInteger(cmd.points) && cmd.points! >= 0 && cmd.points! <= 100, '完成獎勵請設定 0～100 分');
+  assert(Number.isInteger(cmd.points) && cmd.points! >= -100 && cmd.points! <= 100, '每位勾選學生的分數請設定 −100～＋100 的整數');
   assert(!cmd.taskId || task, '找不到這個項目');
   if (task) { task.title = cmd.title.trim(); task.points = cmd.points!; }
   else s.tasks.push({id:cmd.id, title:cmd.title.trim(), points:cmd.points!, archived:false});
