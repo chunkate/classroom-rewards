@@ -282,3 +282,40 @@ h1,h2,h3 { color:#473830;letter-spacing:.015em; }
 @media(max-width:370px){
   .check-grid.round-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
+
+@media(min-width:651px) and (max-width:850px){
+  body:has(.task-view) .account-toolbar { padding:5px 12px;gap:10px;font-size:11px; }
+  body:has(.task-view) .account-toolbar span { width:auto; }
+  .task-view { padding:8px 12px; }
+  .task-view .masthead { min-height:0;padding:6px 10px;margin-bottom:6px;border-radius:12px;box-shadow:0 3px 0 #e7b95c; }
+  .task-view .masthead::after,.task-view .masthead .eyebrow,.task-view .class-chip { display:none; }
+  .task-view .brand-mark { width:30px;height:30px;border-width:2px;border-radius:9px;box-shadow:0 2px 0 #9f2740; }
+  .task-view .brand-mark svg { width:18px;height:18px; }
+  .task-view h1 { font-size:16px; }
+  .task-view .save-status { margin-left:auto;padding:3px 5px;font-size:10px; }
+  .task-view .topbar { align-items:center;flex-wrap:nowrap;gap:6px; }
+  .task-view .main-tabs { width:auto;flex:1;margin-bottom:4px; }
+  .task-view .main-tabs [data-slot=tabs-trigger] { min-height:32px;padding:5px;font-size:11px; }
+  .task-view .date-control { flex-shrink:0;padding:0 0 4px;font-size:11px;gap:4px; }
+  .task-view .date-control input { padding:4px;font-size:11px; }
+  .task-view .status-line { display:none; }
+  .task-view .section-heading { align-items:center;gap:6px;margin:4px 0 6px; }
+  .task-view .section-heading .eyebrow { display:none; }
+  .task-view .section-heading h2 { font-size:16px; }
+  .task-view .section-heading .action { min-height:32px;padding:5px 8px;font-size:11px; }
+  .task-view .task-layout { display:block; }
+  .task-view .task-sidebar { display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px;margin-bottom:8px;white-space:nowrap; }
+  .task-view .task-sidebar .sidebar-title { flex:0 0 auto;margin:0 4px 0 0; }
+  .task-view .task-sidebar .task-option { flex:0 0 auto;width:auto;max-width:130px;min-height:34px;margin:0;padding:5px 8px;gap:5px;font-size:11px; }
+  .task-view .task-sidebar .check-label { flex:0 0 auto;margin:0 4px; }
+  .task-view .task-board { padding:9px; }
+  .task-view .task-board-heading h3 { font-size:16px; }
+  .task-view .task-board-heading p { font-size:11px;margin-top:1px; }
+  .task-view .round-toolbar { gap:6px;padding:6px 8px;margin:6px 0; }
+  .task-view .round-toolbar .action { min-width:65px;min-height:30px;padding:3px 9px;font-size:13px; }
+  .task-view .round-toolbar>span { font-size:11px;line-height:1.3; }
+  .task-view .check-grid.round-grid { grid-template-columns:repeat(6,minmax(0,1fr));gap:5px; }
+  .task-view .round-grid .check-card { min-height:52px;border-radius:10px; }
+  .task-view .round-grid .check-seat { font-size:23px; }
+  .task-view .batch-note { margin-top:5px;font-size:10px;line-height:1.3; }
+}
